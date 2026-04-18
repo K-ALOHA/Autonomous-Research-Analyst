@@ -11,11 +11,20 @@ export async function GET(
     return NextResponse.json({ error: "Missing run id" }, { status: 400 });
   }
 
-  const backendUrl =
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.BACKEND_URL ||
-    "http://localhost:8000";
-  const url = new URL(`/research/${encodeURIComponent(runId)}/export/pdf`, backendUrl).toString();
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
+  if (!backendUrl) {
+    return NextResponse.json(
+      {
+        error: "backend_not_configured",
+        message:
+          "Set NEXT_PUBLIC_BACKEND_URL (same origin as the research API) in environment variables.",
+      },
+      { status: 503 },
+    );
+  }
+
+  const base = backendUrl.replace(/\/+$/, "");
+  const url = `${base}/research/${encodeURIComponent(runId)}/export/pdf`;
 
   const upstream = await fetch(url, { method: "GET" }).catch((err) => {
     return NextResponse.json(

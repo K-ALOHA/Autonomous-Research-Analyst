@@ -95,7 +95,17 @@ export default function HomePage() {
 
       if (!res.ok) {
         const t = await res.text().catch(() => "");
-        throw new Error(t || `Request failed: ${res.status}`);
+        try {
+          const j = JSON.parse(t) as { message?: string; error?: string };
+          throw new Error(
+            j.message || j.error || t || `Request failed: ${res.status}`,
+          );
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            throw new Error(t || `Request failed: ${res.status}`);
+          }
+          throw e;
+        }
       }
 
       for await (const msg of readNdjsonOrTextStream(res)) {
@@ -319,16 +329,12 @@ export default function HomePage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="font-semibold text-gray-900">Backend integration</div>
           <div className="mt-1">
-            The Next.js API route proxies to your FastAPI research stream. Set{" "}
+            The app calls your FastAPI backend using{" "}
             <span className="font-medium">NEXT_PUBLIC_BACKEND_URL</span> and{" "}
             <span className="font-medium">NEXT_PUBLIC_BACKEND_STREAM_PATH</span>{" "}
-            (for example <span className="font-mono">/research</span>). The
-            upstream request uses{" "}
-            <span className="font-mono">
-              process.env.NEXT_PUBLIC_BACKEND_URL +
-              process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH
-            </span>
-            .
+            (for example <span className="font-mono">/research</span>). Configure
+            both in production (e.g. Vercel environment variables); there is no mock
+            stream.
           </div>
         </div>
       </footer>

@@ -14,16 +14,16 @@ Then open `http://localhost:3000`.
 
 ## Backend integration
 
-The UI calls `POST /api/stream` (Next.js route), which proxies to your backend
-research stream at:
+The UI calls `POST /api/stream` (Next.js route), which proxies to your backend at:
 
-`process.env.NEXT_PUBLIC_BACKEND_URL` + `process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH`
+`POST ${NEXT_PUBLIC_BACKEND_URL}${NEXT_PUBLIC_BACKEND_STREAM_PATH}`
 
-(for example `http://localhost:8000` + `/research`). If either variable is
-missing, the route returns HTTP 503 with a JSON error (no mock stream).
+(for example `https://api.example.com` + `/research`). **Both** variables must be
+set (e.g. in Vercel → Project → Settings → Environment Variables). If either is
+missing, the route returns **503** JSON with `error: "backend_not_configured"` — there is **no** mock stream.
 
-When proxying FastAPI `/research` SSE responses, the route normalizes them into
-NDJSON token/trace messages for the frontend stream parser.
+FastAPI `text/event-stream` (SSE) responses are normalized to NDJSON for the
+client parser. NDJSON responses from the backend are passed through.
 
 ### Expected streaming format
 

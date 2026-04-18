@@ -1,75 +1,208 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Node.js runtime: reliable streaming proxy to FastAPI on Vercel (recommended).
+ * Switch to `export const runtime = "edge"` only if you need Edge; this handler
+ * uses Web Streams + fetch and is compatible with both.
+ */
 export const runtime = "nodejs";
+
+/** Avoid accidental static caching of the proxy response. */
+export const dynamic = "force-dynamic";
 
 function jsonLine(obj: unknown) {
   return JSON.stringify(obj) + "\n";
 }
 
-/**
- * Build the upstream streaming URL from public env vars (available to server route at runtime).
- * Shape: `${NEXT_PUBLIC_BACKEND_URL}${NEXT_PUBLIC_BACKEND_STREAM_PATH}`
- */
-function getBackendStreamUrl():
-  | { ok: true; url: string }
-  | { ok: false; missing: string[] } {
-  const base = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
-  const path = process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH?.trim();
-  const missing: string[] = [];
-  if (!base) missing.push("NEXT_PUBLIC_BACKEND_URL");
-  if (!path) missing.push("NEXT_PUBLIC_BACKEND_STREAM_PATH");
-  if (missing.length) return { ok: false, missing };
+type ResolveResult =
+  | { ok: true; apiUrl: string }
+  | { ok: false; missing: string[] };
 
-  const normalizedBase = base.replace(/\/+$/, "");
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return { ok: true, url: `${normalizedBase}${normalizedPath}` };
+/**
+ * Read backend URL from env (Vercel: Project → Settings → Environment Variables).
+ * Never throws; trims and validates.
+ */
+function resolveBackendApiUrl(): ResolveResult {
+  const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
+  const streamPath = process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH?.trim();
+  if (!baseUrl || !streamPath) {
+    const missing: string[] = [];
+    if (!baseUrl) missing.push("NEXT_PUBLIC_BACKEND_URL");
+    if (!streamPath) missing.push("NEXT_PUBLIC_BACKEND_STREAM_PATH");
+    return { ok: false, missing };
+  }
+
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+  const normalizedPath = streamPath.startsWith("/") ? streamPath : `/${streamPath}`;
+  return { ok: true, apiUrl: `${normalizedBase}${normalizedPath}` };
 }
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const query = typeof body?.query === "string" ? body.query : "";
+type JsonError = { error: string; message: string; missing?: string[] };
 
-  const cfg = getBackendStreamUrl();
-  if (!cfg.ok) {
-    return NextResponse.json(
+function jsonError(payload: JsonError, status: number) {
+  return NextResponse.json(payload, { status });
+}
+
+/**
+ * Parse incoming JSON and forward to backend with defaults merged in.
+ * Non-JSON bodies are forwarded as-is (e.g. future clients).
+ */
+async function buildUpstreamBody(req: NextRequest): Promise<
+  | { ok: true; body: string; contentType: string }
+  | { ok: false; response: NextResponse }
+> {
+  const contentType = req.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const raw = await req.json().catch(() => null);
+    if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+      return {
+        ok: false,
+        response: jsonError(
+          {
+            error: "invalid_request",
+            message: "Request body must be a JSON object.",
+          },
+          400,
+        ),
+      };
+    }
+
+    const o = raw as Record<string, unknown>;
+    const query = typeof o.query === "string" ? o.query.trim() : "";
+    if (!query) {
+      return {
+        ok: false,
+        response: jsonError(
+          {
+            error: "invalid_request",
+            message: 'Field "query" is required and must be a non-empty string.',
+          },
+          400,
+        ),
+      };
+    }
+
+    const forwarded = {
+      ...o,
+      query,
+      stream: o.stream !== false,
+      include_traces: o.include_traces !== false,
+    };
+
+    return {
+      ok: true,
+      body: JSON.stringify(forwarded),
+      contentType: "application/json",
+    };
+  }
+
+  const text = await req.text();
+  if (!text.trim()) {
+    return {
+      ok: false,
+      response: jsonError(
+        {
+          error: "invalid_request",
+          message: "Request body is empty or not supported. Send JSON with a \"query\" field.",
+        },
+        400,
+      ),
+    };
+  }
+
+  return { ok: true, body: text, contentType: contentType || "application/octet-stream" };
+}
+
+export async function POST(req: NextRequest) {
+  const resolved = resolveBackendApiUrl();
+  if (!resolved.ok) {
+    return jsonError(
       {
-        error: "Backend not configured",
+        error: "backend_not_configured",
         message:
-          "Set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_STREAM_PATH to proxy the research stream.",
-        missing: cfg.missing,
+          "Set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_STREAM_PATH in the environment (Vercel: Project Settings → Environment Variables).",
+        missing: resolved.missing,
       },
-      { status: 503 },
+      503,
     );
   }
 
-  const upstream = await fetch(cfg.url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query,
-      stream: true,
-      include_traces: true,
-    }),
-  }).catch((err) => {
-    return NextResponse.json(
-      { error: "Failed to reach backend", details: String(err) },
-      { status: 502 },
-    );
-  });
+  const built = await buildUpstreamBody(req);
+  if (!built.ok) {
+    return built.response;
+  }
 
-  if (upstream instanceof NextResponse) return upstream;
+  const headers: HeadersInit = {
+    "Content-Type": built.contentType,
+  };
+  const accept = req.headers.get("accept");
+  if (accept) {
+    headers.Accept = accept;
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(resolved.apiUrl, {
+      method: "POST",
+      headers,
+      body: built.body,
+      signal: req.signal,
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to connect to upstream backend.";
+    return jsonError(
+      {
+        error: "upstream_unreachable",
+        message,
+      },
+      502,
+    );
+  }
+
   if (!upstream.ok) {
     const text = await upstream.text().catch(() => "");
-    return NextResponse.json(
-      { error: "Backend error", status: upstream.status, body: text },
-      { status: 502 },
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { message?: string; detail?: string };
+      if (typeof parsed?.message === "string") {
+        detail = parsed.message;
+      }
+    } catch {
+      // keep raw text
+    }
+    const status =
+      upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502;
+    return jsonError(
+      {
+        error: "upstream_error",
+        message: detail || `Backend returned status ${upstream.status}.`,
+      },
+      status,
     );
   }
 
-  // Normalize backend SSE into frontend NDJSON contract.
   const contentType = upstream.headers.get("content-type") || "";
+
+  // FastAPI StreamingResponse: SSE → normalize to NDJSON for the client parser.
   if (contentType.includes("text/event-stream") && upstream.body) {
     return new Response(sseToNdjson(upstream.body), {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+      },
+    });
+  }
+
+  // NDJSON / JSONL: pass through for the same client parser.
+  if (
+    upstream.body &&
+    (contentType.includes("ndjson") ||
+      contentType.includes("application/jsonl") ||
+      contentType.includes("application/x-ndjson"))
+  ) {
+    return new Response(upstream.body, {
       headers: {
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
@@ -107,7 +240,7 @@ function sseToNdjson(input: ReadableStream<Uint8Array>): ReadableStream<Uint8Arr
           const raw = dataLines.join("\n");
           dataLines = [];
 
-          let payload: any;
+          let payload: unknown;
           try {
             payload = JSON.parse(raw);
           } catch {
@@ -115,38 +248,41 @@ function sseToNdjson(input: ReadableStream<Uint8Array>): ReadableStream<Uint8Arr
             return;
           }
 
-          if (payload?.type === "meta") {
+          const p = payload as Record<string, unknown>;
+
+          if (p?.type === "meta") {
             controller.enqueue(
               encoder.encode(
                 jsonLine({
                   type: "trace",
                   event: {
-                    id: String(payload.run_id || crypto.randomUUID()),
+                    id: String(p.run_id ?? crypto.randomUUID()),
                     ts: Date.now(),
                     type: "run.started",
-                    payload,
+                    payload: p,
                   },
                 }),
               ),
             );
-          } else if (payload?.type === "trace") {
-            const step = Number(payload.step || 0);
-            const ts = Date.parse(String(payload.ts || "")) || Date.now();
+          } else if (p?.type === "trace") {
+            const step = Number(p.step ?? 0);
+            const ts = Date.parse(String(p.ts ?? "")) || Date.now();
             controller.enqueue(
               encoder.encode(
                 jsonLine({
                   type: "trace",
                   event: {
-                    id: `${payload.run_id || "run"}:${step || crypto.randomUUID()}`,
+                    id: `${p.run_id ?? "run"}:${step || crypto.randomUUID()}`,
                     ts,
                     type: "workflow.trace",
-                    payload: payload.state ?? payload,
+                    payload: p.state ?? p,
                   },
                 }),
               ),
             );
-          } else if (payload?.type === "result") {
-            const report = String(payload.result?.report_markdown || "");
+          } else if (p?.type === "result") {
+            const result = p.result as Record<string, unknown> | undefined;
+            const report = String(result?.report_markdown ?? "");
             if (report) {
               controller.enqueue(encoder.encode(jsonLine({ type: "token", text: report })));
             }
@@ -155,24 +291,25 @@ function sseToNdjson(input: ReadableStream<Uint8Array>): ReadableStream<Uint8Arr
                 jsonLine({
                   type: "final",
                   data: {
-                    ...(payload.result ?? {}),
-                    run_id: payload.run_id,
+                    ...(result ?? {}),
+                    run_id: p.run_id,
                   },
                 }),
               ),
             );
-          } else if (payload?.type === "error") {
+          } else if (p?.type === "error") {
+            const errObj = p.error as Record<string, unknown> | undefined;
             controller.enqueue(
               encoder.encode(
                 jsonLine({
                   type: "error",
-                  message: String(payload.error?.message || "Backend error"),
-                  details: payload.error ?? payload,
+                  message: String(errObj?.message ?? "Backend error"),
+                  details: p.error ?? p,
                 }),
               ),
             );
           } else if (eventName === "result") {
-            controller.enqueue(encoder.encode(jsonLine({ type: "final", data: payload })));
+            controller.enqueue(encoder.encode(jsonLine({ type: "final", data: p })));
           }
 
           eventName = "";
