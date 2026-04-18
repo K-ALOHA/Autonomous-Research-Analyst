@@ -13,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from backend.graph.runtime import extract_result, get_compiled_workflow
 from backend.models.api import ErrorEnvelope
-from backend.services.pdf_export import render_report_pdf
 from backend.services.run_store import run_store
 from backend.utils.config import get_settings
 
@@ -190,7 +189,19 @@ async def export_research_pdf(run_id: str):
             detail=f"run_id '{run_id}' not found or expired",
         )
 
-    pdf_bytes, filename = render_report_pdf(run_id=stored.run_id, query=stored.query, result=stored.result)
+    try:
+        from backend.services.pdf_export import render_report_pdf
+
+        pdf_bytes, filename = render_report_pdf(
+            run_id=stored.run_id, query=stored.query, result=stored.result
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("pdf_export_failed", extra={"run_id": run_id})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"PDF generation failed: {type(e).__name__}: {e}",
+        ) from e
+
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(
         iter([pdf_bytes]),

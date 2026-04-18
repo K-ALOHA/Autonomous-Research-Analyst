@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.services.router import router as api_router
 from backend.utils.config import get_settings
+from backend.utils.env_probe import list_detected_config_env_names
 from backend.utils.logging import configure_logging
 
 
@@ -14,9 +16,26 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
 
+    logger = logging.getLogger(__name__)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        logger.info("App starting...")
+        try:
+            names = list_detected_config_env_names()
+            logger.info(
+                "Configuration env vars detected (names only, values never logged): %s",
+                names,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("startup_env_probe_failed: %s", exc)
+        yield
+        logger.info("App shutting down.")
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     allow_origins = [o.strip() for o in settings.cors_allow_origins.split(",") if o.strip()]
@@ -30,7 +49,6 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
 
-    logger = logging.getLogger(__name__)
     logger.info(
         "app_initialized",
         extra={"environment": settings.environment, "log_json": settings.log_json},

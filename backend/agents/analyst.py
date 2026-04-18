@@ -99,7 +99,12 @@ class AnalystAgent:
         self._model_kwargs = model_kwargs or {}
 
         self._context: Optional[AnalystContext] = None
+        self._map_prompt: Any = None
+        self._reduce_prompt: Any = None
 
+    def _ensure_prompts(self) -> None:
+        if self._map_prompt is not None and self._reduce_prompt is not None:
+            return
         try:
             from langchain_core.prompts import ChatPromptTemplate as _ChatPromptTemplate
         except Exception as e:  # noqa: BLE001
@@ -178,6 +183,7 @@ class AnalystAgent:
         prior_insights: Optional[Sequence[str]] = None,
     ) -> AnalystOutput:
         """Synchronous analysis entrypoint."""
+        self._ensure_prompts()
         ctx = self._resolve_context(
             context=context,
             question=question,
@@ -237,6 +243,7 @@ class AnalystAgent:
         prior_insights: Optional[Sequence[str]] = None,
     ) -> AnalystOutput:
         """Async analysis entrypoint."""
+        self._ensure_prompts()
         ctx = self._resolve_context(
             context=context,
             question=question,
@@ -371,6 +378,7 @@ class AnalystAgent:
         return "\n".join(f"- {s}" for s in cleaned) if cleaned else "- (none)"
 
     def _invoke_prompt(self, prompt: ChatPromptTemplate, **vars: Any) -> BaseMessage:
+        self._ensure_prompts()
         messages = prompt.format_messages(**vars)
         kwargs = dict(self._model_kwargs)
         if self._temperature is not None:
@@ -378,6 +386,7 @@ class AnalystAgent:
         return self._llm.invoke(messages, **kwargs)
 
     async def _ainvoke_prompt(self, prompt: ChatPromptTemplate, **vars: Any) -> BaseMessage:
+        self._ensure_prompts()
         messages = prompt.format_messages(**vars)
         kwargs = dict(self._model_kwargs)
         if self._temperature is not None:

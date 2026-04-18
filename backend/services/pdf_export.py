@@ -3,9 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fpdf import FPDF
-from fpdf.errors import FPDFException
-
 
 def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", (value or "").lower()).strip("-") or "research-report"
@@ -38,7 +35,9 @@ def _sanitize_for_pdf(text: str) -> str:
     return (text or "").encode("latin-1", errors="replace").decode("latin-1")
 
 
-def _safe_multicell(pdf: FPDF, text: str, *, line_h: int) -> None:
+def _safe_multicell(pdf: Any, text: str, *, line_h: int) -> None:
+    from fpdf.errors import FPDFException
+
     epw = pdf.w - pdf.l_margin - pdf.r_margin
     safe = _sanitize_for_pdf(_soft_wrap_long_tokens(text))
     try:
@@ -58,6 +57,11 @@ def _extract_summary(markdown: str) -> str:
 
 
 def render_report_pdf(*, run_id: str, query: str, result: dict[str, Any]) -> tuple[bytes, str]:
+    try:
+        from fpdf import FPDF
+    except ImportError as e:
+        raise RuntimeError("pdf_export_dependency_missing: install fpdf2 (see requirements.txt)") from e
+
     report_markdown = str(result.get("report_markdown") or "").strip()
     report_sources = result.get("report_sources") or []
 

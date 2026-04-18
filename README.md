@@ -102,6 +102,13 @@ pip install -r requirements.txt
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+**Render / platforms expecting `main:app`:** from the repo root, use the shim module `main.py`:
+
+```bash
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 10000
+```
+
 Frontend:
 
 ```bash

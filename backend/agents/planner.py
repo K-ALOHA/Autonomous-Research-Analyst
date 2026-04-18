@@ -121,23 +121,20 @@ class PlannerAgent:
 
         def _run_once() -> dict[str, Any]:
             try:
-                from openai import OpenAI
                 from openai import APIConnectionError, APIError, APITimeoutError, RateLimitError
             except Exception as e:  # noqa: BLE001
                 raise PlannerError("openai_sdk_missing: add 'openai' to requirements and install dependencies") from e
+
+            from backend.clients.openrouter import get_openrouter_client
 
             api_key = self.api_key or os.getenv("OPENROUTER_API_KEY")
             if not api_key:
                 raise PlannerError("openrouter_api_key_missing: set OPENROUTER_API_KEY")
 
-            client = OpenAI(
-                api_key=api_key,
-                base_url=self.config.base_url,
-                default_headers={
-                    "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
-                    "X-Title": os.getenv("OPENROUTER_APP_NAME", "autonomous-research-analyst"),
-                },
-            )
+            try:
+                client = get_openrouter_client(api_key=api_key, base_url=self.config.base_url)
+            except RuntimeError as e:
+                raise PlannerError(str(e)) from e
 
             system = (
                 "You are a Planner Agent. Break the user's request into a small, actionable set of subtasks.\n"

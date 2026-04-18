@@ -134,9 +134,8 @@ class SearchAgent:
         timeout_s: float = 20.0,
         max_concurrency: int = 8,
     ) -> None:
-        self.api_key = api_key or os.getenv("TAVILY_API_KEY")
-        if not self.api_key:
-            raise ValueError("Missing Tavily API key. Set TAVILY_API_KEY.")
+        raw = api_key if api_key is not None else os.getenv("TAVILY_API_KEY")
+        self.api_key = (raw or "").strip() or None
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
         self._sem = asyncio.Semaphore(max(1, int(max_concurrency)))
@@ -152,6 +151,14 @@ class SearchAgent:
         q_clean = _clean_text(query) or ""
         if not q_clean:
             return SearchQueryResult(query=query, results=[], took_ms=0, error="empty_query")
+
+        if not self.api_key:
+            return SearchQueryResult(
+                query=q_clean,
+                results=[],
+                took_ms=0,
+                error="tavily_api_key_missing",
+            )
 
         payload = TavilySearchRequest(
             query=q_clean,

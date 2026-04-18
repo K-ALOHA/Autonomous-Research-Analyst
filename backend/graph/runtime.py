@@ -9,6 +9,7 @@ from backend.agents.critic import CriticAgent
 from backend.agents.editor import EditorAgent
 from backend.agents.planner import PlannerAgent, PlannerConfig
 from backend.agents.search import SearchAgent
+from backend.clients.openrouter import get_openrouter_client
 from backend.graph.workflow import WorkflowAgents, build_workflow
 from backend.utils.config import get_settings
 
@@ -57,25 +58,17 @@ class OpenRouterChatModel:
     ):
         self.model = model
         self.api_key = api_key
+        self.base_url = base_url
+        self._client = None
 
-        from openai import OpenAI
-
-        key = api_key or os.getenv("OPENROUTER_API_KEY")
-        if not key:
-            raise RuntimeError("openrouter_api_key_missing: set OPENROUTER_API_KEY")
-
-        self._client = OpenAI(
-            api_key=key,
-            base_url=base_url,
-            default_headers={
-                "HTTP-Referer": os.getenv("OPENROUTER_SITE_URL", "http://localhost"),
-                "X-Title": os.getenv("OPENROUTER_APP_NAME", "autonomous-research-analyst"),
-            },
-        )
+    def _get_client(self):
+        if self._client is None:
+            self._client = get_openrouter_client(api_key=self.api_key, base_url=self.base_url)
+        return self._client
 
     def invoke(self, input: Any, **kwargs: Any) -> Any:
         messages = _to_openrouter_messages(input if isinstance(input, list) else [input])
-        resp = self._client.chat.completions.create(
+        resp = self._get_client().chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=_pop_float(kwargs, "temperature"),
@@ -91,7 +84,7 @@ class OpenRouterChatModel:
         import anyio
 
         def _run() -> Any:
-            resp = self._client.chat.completions.create(
+            resp = self._get_client().chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
@@ -131,7 +124,7 @@ def get_compiled_workflow():
     )
     search = SearchAgent(api_key=settings.tavily_api_key)
     analyst_llm = OpenRouterChatModel(
-        model=settings.analyst_model or os.getenv("ANALYST_MODEL", "deepseek/deepseek-chat"),
+        model=settings.analyst_model or (os.getenv("ANALYST_MODEL") or "deepseek/deepseek-chat"),
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
     )
