@@ -125,7 +125,7 @@ class PlannerAgent:
             except Exception as e:  # noqa: BLE001
                 raise PlannerError("openai_sdk_missing: add 'openai' to requirements and install dependencies") from e
 
-            from backend.clients.openrouter import get_openrouter_client
+            from clients.openrouter import get_openrouter_client
 
             api_key = self.api_key or os.getenv("OPENROUTER_API_KEY")
             if not api_key:

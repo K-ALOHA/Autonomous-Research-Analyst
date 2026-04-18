@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.services.router import router as api_router
-from backend.utils.config import get_settings
-from backend.utils.env_probe import list_detected_config_env_names
-from backend.utils.logging import configure_logging
+from services.router import router as api_router
+from utils.config import get_settings
+from utils.env_probe import list_detected_config_env_names
+from utils.logging import configure_logging
 
 
 def create_app() -> FastAPI:

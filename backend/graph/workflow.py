@@ -10,11 +10,11 @@ from typing_extensions import Annotated, NotRequired, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import RetryPolicy, Send
 
-from backend.agents.analyst import AnalystAgent
-from backend.agents.critic import CriticAgent
-from backend.agents.editor import EditorAgent, EditorSource
-from backend.agents.planner import PlannerAgent
-from backend.agents.search import SearchAgent, normalize_search_batch
+from agents.analyst import AnalystAgent
+from agents.critic import CriticAgent
+from agents.editor import EditorAgent, EditorSource
+from agents.planner import PlannerAgent
+from agents.search import SearchAgent, normalize_search_batch
 
 logger = logging.getLogger(__name__)
 

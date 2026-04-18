@@ -1,7 +1,7 @@
 """Agent implementations live here."""
 
-from backend.agents.analyst import AnalystAgent, AnalystContext, AnalystOutput
-from backend.agents.critic import CriticAgent, CriticIssue, CritiqueResult
+from agents.analyst import AnalystAgent, AnalystContext, AnalystOutput
+from agents.critic import CriticAgent, CriticIssue, CritiqueResult
 
 __all__ = [
     "AnalystAgent",

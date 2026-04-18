@@ -4,14 +4,14 @@ import os
 from functools import lru_cache
 from typing import Any, Iterable, Mapping, Optional
 
-from backend.agents.analyst import AnalystAgent
-from backend.agents.critic import CriticAgent
-from backend.agents.editor import EditorAgent
-from backend.agents.planner import PlannerAgent, PlannerConfig
-from backend.agents.search import SearchAgent
-from backend.clients.openrouter import get_openrouter_client
-from backend.graph.workflow import WorkflowAgents, build_workflow
-from backend.utils.config import get_settings
+from agents.analyst import AnalystAgent
+from agents.critic import CriticAgent
+from agents.editor import EditorAgent
+from agents.planner import PlannerAgent, PlannerConfig
+from agents.search import SearchAgent
+from clients.openrouter import get_openrouter_client
+from graph.workflow import WorkflowAgents, build_workflow
+from utils.config import get_settings
 
 
 def _to_openrouter_messages(messages: Iterable[Any]) -> list[dict[str, str]]:

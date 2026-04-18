@@ -11,10 +11,10 @@ from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend.graph.runtime import extract_result, get_compiled_workflow
-from backend.models.api import ErrorEnvelope
-from backend.services.run_store import run_store
-from backend.utils.config import get_settings
+from graph.runtime import extract_result, get_compiled_workflow
+from models.api import ErrorEnvelope
+from services.run_store import run_store
+from utils.config import get_settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -190,7 +190,7 @@ async def export_research_pdf(run_id: str):
         )
 
     try:
-        from backend.services.pdf_export import render_report_pdf
+        from services.pdf_export import render_report_pdf
 
         pdf_bytes, filename = render_report_pdf(
             run_id=stored.run_id, query=stored.query, result=stored.result
