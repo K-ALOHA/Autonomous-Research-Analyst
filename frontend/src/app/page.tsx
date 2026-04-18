@@ -116,9 +116,18 @@ export default function HomePage() {
         } else if (msg.type === "final") {
           const data = (msg.data ?? {}) as FinalResultPayload;
           setFinalResult(data);
-          if (typeof data.report_markdown === "string" && data.report_markdown.trim()) {
-            setAnswer(data.report_markdown);
-          }
+          // Do not replace progressively streamed markdown with `report_markdown` — the proxy
+          // usually sends the full report as token(s) first; overwriting here caused only a
+          // heading (or partial snapshot) to remain. Only fill from final when nothing streamed.
+          setAnswer((prev) => {
+            if (prev.trim().length > 0) return prev;
+            const fromData =
+              typeof data.report_markdown === "string" ? data.report_markdown.trim() : "";
+            if (fromData) return fromData;
+            const fromMsg = typeof msg.text === "string" ? msg.text.trim() : "";
+            if (fromMsg) return fromMsg;
+            return prev;
+          });
         } else if (msg.type === "error") {
           throw new Error(msg.message);
         }
