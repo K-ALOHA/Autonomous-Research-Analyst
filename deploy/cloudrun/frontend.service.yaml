@@ -1,0 +1,26 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: FRONTEND_SERVICE_NAME
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: IMAGE_FRONTEND
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: BACKEND_STREAM_PATH
+              value: /research
+            - name: BACKEND_URL
+              value: BACKEND_URL_VALUE
+            - name: NEXT_PUBLIC_BACKEND_URL
+              value: BACKEND_URL_VALUE

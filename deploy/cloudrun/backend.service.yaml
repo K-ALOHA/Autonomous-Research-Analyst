@@ -1,0 +1,32 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: BACKEND_SERVICE_NAME
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 40
+      timeoutSeconds: 900
+      containers:
+        - image: IMAGE_BACKEND
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENV
+              value: production
+            - name: LOG_JSON
+              value: "true"
+            - name: LOG_LEVEL
+              value: INFO
+            - name: CORS_ALLOW_ORIGINS
+              value: "*"
+            - name: OPENROUTER_API_KEY
+              value: ""
+            - name: ANALYST_MODEL
+              value: deepseek/deepseek-chat
+            - name: TAVILY_API_KEY
+              value: ""
