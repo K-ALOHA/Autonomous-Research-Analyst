@@ -14,10 +14,13 @@ Then open `http://localhost:3000`.
 
 ## Backend integration
 
-The UI calls `POST /api/stream` (Next.js route), which either:
+The UI calls `POST /api/stream` (Next.js route), which proxies to your backend
+research stream at:
 
-- proxies to your backend stream (`NEXT_PUBLIC_BACKEND_URL` + `BACKEND_STREAM_PATH`), or
-- falls back to a mock stream if `BACKEND_STREAM_PATH` is not set.
+`process.env.NEXT_PUBLIC_BACKEND_URL` + `process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH`
+
+(for example `http://localhost:8000` + `/research`). If either variable is
+missing, the route returns HTTP 503 with a JSON error (no mock stream).
 
 When proxying FastAPI `/research` SSE responses, the route normalizes them into
 NDJSON token/trace messages for the frontend stream parser.

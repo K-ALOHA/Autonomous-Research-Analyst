@@ -20,14 +20,14 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
-        BACKEND_STREAM_PATH: ${BACKEND_STREAM_PATH:-/research}
+        NEXT_PUBLIC_BACKEND_STREAM_PATH: ${NEXT_PUBLIC_BACKEND_STREAM_PATH:-/research}
     env_file:
       - .env
     environment:
       PORT: ${FRONTEND_PORT:-3000}
       BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:8000}
-      BACKEND_STREAM_PATH: ${BACKEND_STREAM_PATH:-/research}
+      NEXT_PUBLIC_BACKEND_STREAM_PATH: ${NEXT_PUBLIC_BACKEND_STREAM_PATH:-/research}
     depends_on:
       - backend
     ports:

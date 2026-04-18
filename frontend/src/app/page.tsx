@@ -319,10 +319,16 @@ export default function HomePage() {
         <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="font-semibold text-gray-900">Backend integration</div>
           <div className="mt-1">
-            By default, the frontend uses a mock stream. To connect the real
-            backend stream, set{" "}
-            <span className="font-medium">BACKEND_STREAM_PATH</span> and{" "}
-            <span className="font-medium">NEXT_PUBLIC_BACKEND_URL</span>.
+            The Next.js API route proxies to your FastAPI research stream. Set{" "}
+            <span className="font-medium">NEXT_PUBLIC_BACKEND_URL</span> and{" "}
+            <span className="font-medium">NEXT_PUBLIC_BACKEND_STREAM_PATH</span>{" "}
+            (for example <span className="font-mono">/research</span>). The
+            upstream request uses{" "}
+            <span className="font-mono">
+              process.env.NEXT_PUBLIC_BACKEND_URL +
+              process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH
+            </span>
+            .
           </div>
         </div>
       </footer>

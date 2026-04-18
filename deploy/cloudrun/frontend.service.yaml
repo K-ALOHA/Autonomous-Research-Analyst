@@ -18,7 +18,7 @@ spec:
           env:
             - name: NODE_ENV
               value: production
-            - name: BACKEND_STREAM_PATH
+            - name: NEXT_PUBLIC_BACKEND_STREAM_PATH
               value: /research
             - name: BACKEND_URL
               value: BACKEND_URL_VALUE

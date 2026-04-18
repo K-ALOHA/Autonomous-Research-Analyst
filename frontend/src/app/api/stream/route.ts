@@ -6,99 +6,43 @@ function jsonLine(obj: unknown) {
   return JSON.stringify(obj) + "\n";
 }
 
-async function mockStream(query: string) {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const id = () => crypto.randomUUID();
+/**
+ * Build the upstream streaming URL from public env vars (available to server route at runtime).
+ * Shape: `${NEXT_PUBLIC_BACKEND_URL}${NEXT_PUBLIC_BACKEND_STREAM_PATH}`
+ */
+function getBackendStreamUrl():
+  | { ok: true; url: string }
+  | { ok: false; missing: string[] } {
+  const base = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
+  const path = process.env.NEXT_PUBLIC_BACKEND_STREAM_PATH?.trim();
+  const missing: string[] = [];
+  if (!base) missing.push("NEXT_PUBLIC_BACKEND_URL");
+  if (!path) missing.push("NEXT_PUBLIC_BACKEND_STREAM_PATH");
+  if (missing.length) return { ok: false, missing };
 
-      controller.enqueue(
-        encoder.encode(
-          jsonLine({
-            type: "trace",
-            event: { id: id(), ts: Date.now(), type: "run.started", payload: { query } },
-          }),
-        ),
-      );
-
-      const text =
-        "Mock stream (set NEXT_PUBLIC_BACKEND_URL + BACKEND_STREAM_PATH to use the real backend).\n\n" +
-        `Query: ${query}\n\n` +
-        "This UI supports token streaming + trace events.\n";
-
-      let i = 0;
-      const interval = setInterval(() => {
-        if (i >= text.length) {
-          clearInterval(interval);
-          controller.enqueue(
-            encoder.encode(
-              jsonLine({
-                type: "trace",
-                event: {
-                  id: id(),
-                  ts: Date.now(),
-                  type: "run.completed",
-                  payload: { ok: true },
-                },
-              }),
-            ),
-          );
-          controller.enqueue(encoder.encode(jsonLine({ type: "final" })));
-          controller.close();
-          return;
-        }
-
-        // emit token chunks
-        controller.enqueue(
-          encoder.encode(jsonLine({ type: "token", text: text.slice(i, i + 6) })),
-        );
-        if (i % 24 === 0) {
-          controller.enqueue(
-            encoder.encode(
-              jsonLine({
-                type: "trace",
-                event: {
-                  id: id(),
-                  ts: Date.now(),
-                  type: "agent.step",
-                  payload: { step: Math.floor(i / 24) + 1 },
-                },
-              }),
-            ),
-          );
-        }
-        i += 6;
-      }, 50);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "application/x-ndjson; charset=utf-8",
-      "Cache-Control": "no-cache, no-transform",
-    },
-  });
+  const normalizedBase = base.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return { ok: true, url: `${normalizedBase}${normalizedPath}` };
 }
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const query = typeof body?.query === "string" ? body.query : "";
 
-  const backendUrl =
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.BACKEND_URL ||
-    "http://localhost:8000";
-  const streamPath = process.env.BACKEND_STREAM_PATH || "/research";
-
-  // If backend stream isn't configured, fall back to mock streaming so the
-  // frontend remains usable end-to-end.
-  if (!process.env.BACKEND_STREAM_PATH) {
-    return mockStream(query);
+  const cfg = getBackendStreamUrl();
+  if (!cfg.ok) {
+    return NextResponse.json(
+      {
+        error: "Backend not configured",
+        message:
+          "Set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_STREAM_PATH to proxy the research stream.",
+        missing: cfg.missing,
+      },
+      { status: 503 },
+    );
   }
 
-  const url = new URL(streamPath, backendUrl).toString();
-
-  const upstream = await fetch(url, {
+  const upstream = await fetch(cfg.url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
