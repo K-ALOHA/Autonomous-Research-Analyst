@@ -1,21 +1,16 @@
-/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import { AppHeader } from "@/components/AppHeader";
+import { GlassPanel } from "@/components/GlassPanel";
+import { QueryComposer } from "@/components/QueryComposer";
+import { ReportViewer } from "@/components/ReportViewer";
 import { TracePanel } from "@/components/TracePanel";
 import type { FinalResultPayload, TraceEvent } from "@/lib/streaming";
 import { readNdjsonOrTextStream } from "@/lib/streaming";
 
 type RunState = "idle" | "running" | "error";
-
-function Spinner() {
-  return (
-    <div
-      className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800"
-      aria-label="Loading"
-    />
-  );
-}
 
 export default function HomePage() {
   const [query, setQuery] = useState("");
@@ -97,9 +92,7 @@ export default function HomePage() {
         const t = await res.text().catch(() => "");
         try {
           const j = JSON.parse(t) as { message?: string; error?: string };
-          throw new Error(
-            j.message || j.error || t || `Request failed: ${res.status}`,
-          );
+          throw new Error(j.message || j.error || t || `Request failed: ${res.status}`);
         } catch (e) {
           if (e instanceof SyntaxError) {
             throw new Error(t || `Request failed: ${res.status}`);
@@ -116,13 +109,9 @@ export default function HomePage() {
         } else if (msg.type === "final") {
           const data = (msg.data ?? {}) as FinalResultPayload;
           setFinalResult(data);
-          // Do not replace progressively streamed markdown with `report_markdown` — the proxy
-          // usually sends the full report as token(s) first; overwriting here caused only a
-          // heading (or partial snapshot) to remain. Only fill from final when nothing streamed.
           setAnswer((prev) => {
             if (prev.trim().length > 0) return prev;
-            const fromData =
-              typeof data.report_markdown === "string" ? data.report_markdown.trim() : "";
+            const fromData = typeof data.report_markdown === "string" ? data.report_markdown.trim() : "";
             if (fromData) return fromData;
             const fromMsg = typeof msg.text === "string" ? msg.text.trim() : "";
             if (fromMsg) return fromMsg;
@@ -135,7 +124,7 @@ export default function HomePage() {
 
       setState("idle");
     } catch (e) {
-      if ((e as any)?.name === "AbortError") return;
+      if ((e as { name?: string })?.name === "AbortError") return;
       setState("error");
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -174,180 +163,69 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <header className="mx-auto max-w-6xl px-6 pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <div className="text-sm font-semibold text-blue-700">
-              Autonomous Research Analyst
-            </div>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-gray-900">
-              Streaming research UI
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm text-gray-600">
-              Type a question, watch the answer stream in, and inspect the agent
-              trace as it runs.
-            </p>
-          </div>
+      <AppHeader />
 
-          <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600 shadow-sm">
-            <div className="h-2 w-2 rounded-full bg-green-500" />
-            <span>UI ready</span>
-            <span className="text-gray-300">•</span>
-            <span className="text-gray-500">backend configurable</span>
-          </div>
+      <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 md:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+          className="mb-8 text-center md:text-left"
+        >
+          <p className="text-sm text-zinc-400 md:max-w-2xl">
+            Premium streaming workspace: watch tokens arrive, inspect each graph transition, and export a polished PDF
+            when the run completes.
+          </p>
+        </motion.div>
+
+        <QueryComposer
+          query={query}
+          onChange={setQuery}
+          onRun={onRun}
+          onStop={onStop}
+          running={state === "running"}
+          canSubmit={canSubmit}
+        />
+
+        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.55fr)_minmax(320px,1fr)] lg:items-start">
+          <section className="flex min-h-0 flex-col gap-6">
+            <ReportViewer
+              error={error}
+              answer={answer}
+              running={state === "running"}
+              runId={runId}
+              isDownloading={isDownloading}
+              onDownloadPdf={onDownloadPdf}
+              reportSources={reportSources}
+              answerEndRef={answerEndRef}
+            />
+          </section>
+
+          <aside className="min-h-0">
+            <TracePanel
+              events={events}
+              selectedId={selectedEventId}
+              onSelect={setSelectedEventId}
+              agentStatuses={agentStatuses}
+            />
+          </aside>
         </div>
-      </header>
-
-      <main className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-6 pb-12 pt-8 lg:grid-cols-[1.5fr_1fr]">
-        <section className="flex min-h-0 flex-col gap-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-            <label className="text-sm font-semibold text-gray-900">
-              Query
-            </label>
-            <div className="mt-2 flex gap-2">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) onRun();
-                }}
-                placeholder="Ask a research question…"
-                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
-                disabled={state === "running"}
-              />
-              {state === "running" ? (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onRun}
-                  disabled={!canSubmit}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-black disabled:cursor-not-allowed disabled:bg-gray-300"
-                >
-                  Run
-                </button>
-              )}
-            </div>
-            <div className="mt-2 text-xs text-gray-500">
-              Tip: press <span className="font-medium">⌘/Ctrl + Enter</span> to
-              run.
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <div>
-                <div className="text-sm font-semibold text-gray-900">
-                  Streaming response
-                </div>
-                <div className="text-xs text-gray-500">
-                  NDJSON tokens + trace events
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-gray-600">
-                {runId ? (
-                  <button
-                    type="button"
-                    onClick={onDownloadPdf}
-                    disabled={state === "running" || isDownloading}
-                    className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isDownloading ? "Preparing PDF..." : "Download PDF"}
-                  </button>
-                ) : null}
-                {state === "running" ? (
-                  <>
-                    <Spinner />
-                    <span>Streaming…</span>
-                  </>
-                ) : (
-                  <span className="text-gray-400">idle</span>
-                )}
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              {error ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                  <div className="font-semibold">Error</div>
-                  <div className="mt-1 whitespace-pre-wrap">{error}</div>
-                </div>
-              ) : null}
-
-              {answer ? (
-                <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed text-gray-900">
-                  {answer}
-                </pre>
-              ) : state === "running" ? (
-                <div className="text-sm text-gray-500">
-                  Waiting for first tokens…
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500">
-                  Enter a query and click Run.
-                </div>
-              )}
-
-              {reportSources.length > 0 ? (
-                <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-600">
-                    Citations
-                  </div>
-                  <ul className="mt-2 space-y-1">
-                    {reportSources.map((src, idx) => (
-                      <li key={`${src.url ?? "src"}-${idx}`} className="text-sm">
-                        {src.url ? (
-                          <a
-                            href={src.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-800"
-                          >
-                            {src.title || src.url || `Source ${idx + 1}`}
-                          </a>
-                        ) : (
-                          <span className="text-gray-700">{src.title || `Source ${idx + 1}`}</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              <div ref={answerEndRef} />
-            </div>
-          </div>
-        </section>
-
-        <aside className="min-h-0">
-          <TracePanel
-            events={events}
-            selectedId={selectedEventId}
-            onSelect={setSelectedEventId}
-            agentStatuses={agentStatuses}
-          />
-        </aside>
       </main>
 
-      <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs text-gray-500">
-        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="font-semibold text-gray-900">Backend integration</div>
-          <div className="mt-1">
-            The app calls your FastAPI backend using{" "}
-            <span className="font-medium">NEXT_PUBLIC_BACKEND_URL</span> and{" "}
-            <span className="font-medium">NEXT_PUBLIC_BACKEND_STREAM_PATH</span>{" "}
-            (for example <span className="font-mono">/research</span>). Configure
-            both in production (e.g. Vercel environment variables); there is no mock
-            stream.
-          </div>
-        </div>
+      <footer className="mx-auto max-w-7xl px-4 pb-12 md:px-8">
+        <GlassPanel padding="p-5">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Backend</div>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+            Calls your FastAPI service via{" "}
+            <span className="font-medium text-zinc-200">NEXT_PUBLIC_BACKEND_URL</span> and{" "}
+            <span className="font-medium text-zinc-200">NEXT_PUBLIC_BACKEND_STREAM_PATH</span> (for example{" "}
+            <code className="rounded border border-white/10 bg-black/40 px-1.5 py-0.5 font-mono text-[11px] text-violet-200">
+              /research
+            </code>
+            ). Configure both in production; the UI does not use a mock stream.
+          </p>
+        </GlassPanel>
       </footer>
     </div>
   );
 }
-

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     database_url: str = Field(default="sqlite+aiosqlite:///./ara.db", alias="DATABASE_URL")
     openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1", alias="OPENROUTER_BASE_URL")
     openrouter_api_key: Optional[str] = Field(default=None, alias="OPENROUTER_API_KEY")
+    # Required by OpenRouter for attribution / rankings (sent on every request).
+    openrouter_site_url: str = Field(default="http://localhost", alias="OPENROUTER_SITE_URL")
+    openrouter_app_name: str = Field(default="autonomous-research-analyst", alias="OPENROUTER_APP_NAME")
     tavily_api_key: Optional[str] = Field(default=None, alias="TAVILY_API_KEY")
     planner_model: str = Field(default="deepseek/deepseek-chat", alias="PLANNER_MODEL")
     analyst_model: str = Field(default="deepseek/deepseek-chat", alias="ANALYST_MODEL")
